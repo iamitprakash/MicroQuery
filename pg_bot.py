@@ -95,14 +95,52 @@ if prompt := st.chat_input("Ask a question about your data..."):
                 if result["success"]:
                     status.update(label="Success!", state="complete")
                     st.dataframe(pd.DataFrame(result["data"]))
-                    
-                    # Store in history
                     st.session_state.messages.append({
                         "role": "assistant", 
                         "content": "Here is what I found:",
                         "sql": generated_sql,
                         "data": result["data"]
                     })
+
+                    # 3. Visualization logic
+                    df = pd.DataFrame(result["data"])
+                    if not df.empty and len(df.columns) >= 2:
+                        num_cols = df.select_dtypes(include=['number']).columns.tolist()
+                        cat_cols = df.select_dtypes(exclude=['number']).columns.tolist()
+                        
+                        if num_cols and cat_cols:
+                            with st.expander("📊 Proactive Data Insights", expanded=True):
+                                # Detect chart type and reason suggestion from SQL
+                                suggested_chart = "Bar"
+                                reason = "I've detected categorical and numeric data suitable for comparison."
+                                
+                                if "-- CHART:" in generated_sql:
+                                    parts = generated_sql.split("-- CHART:")[1].split("|")
+                                    suggested_chart = parts[0].strip()
+                                    if len(parts) > 1 and "REASON:" in parts[1]:
+                                        reason = parts[1].replace("REASON:", "").strip()
+                                
+                                if reason:
+                                    st.info(f"💡 **Smart Insight:** {reason}")
+                                
+                                # Map suggested chart to tab index
+                                tab_index = 0
+                                if suggested_chart == "Line": tab_index = 1
+                                elif suggested_chart == "Pie": tab_index = 2
+                                
+                                tabs = st.tabs(["Bar Chart", "Line Chart", "Pie Chart"])
+                                
+                                x_axis = cat_cols[0]
+                                y_axis = num_cols[0]
+                                
+                                with tabs[0]:
+                                    st.bar_chart(df.set_index(x_axis)[y_axis])
+                                with tabs[1]:
+                                    st.line_chart(df.set_index(x_axis)[y_axis])
+                                with tabs[2]:
+                                    st.info("Pie Chart optimization: Best for composition analytics.")
+                                    # Plotly would be better here but staying with native for now
+                                    st.bar_chart(df.set_index(x_axis)[y_axis])
                 else:
                     st.error(f"SQL Execution Error: {result['error']}")
                     st.code(generated_sql, language="sql")

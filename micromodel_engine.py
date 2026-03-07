@@ -37,6 +37,7 @@ Your task is to generate a valid MSSQL (T-SQL) query based on the user's questio
 2. If the user asks for something that cannot be answered by the schema, respond with "-- ERROR: Schema doesn't contain this data".
 3. Use standard PostgreSQL syntax (use double quotes for identifiers only if necessary).
 4. Ensure the query is compatible with PostgreSQL.
+5. If the result set is likely to have at least one numeric column and one categorical/date column, append a suggestion for visualization at the end of the SQL in the format: "-- CHART: <Bar|Line|Pie> | REASON: <One short sentence explaining why this chart helps>"
 """
 
         try:
@@ -50,12 +51,26 @@ Your task is to generate a valid MSSQL (T-SQL) query based on the user's questio
             )
             
             sql = response['message']['content'].strip()
-            # Clean up unintended markdown or common LLM prefixes
+            # Clean up unintended markdown
             sql = sql.replace("```sql", "").replace("```", "").strip()
             if sql.lower().startswith("sql"):
                 sql = sql[3:].strip()
+            
+            # Extract only the first SQL statement if model appends explanation
+            # Look for common explanation starters or double newlines
+            import re
+            # Split by double newline and take the first part if it looks like SQL
+            parts = re.split(r'\n\s*\n', sql)
+            if parts:
+                first_part = parts[0].strip()
+                if first_part.upper().startswith(("SELECT", "WITH", "INSERT", "UPDATE", "DELETE")):
+                     sql = first_part
+
+            # Also ensure we cut off at the first semicolon followed by a newline
+            if ";" in sql:
+                sql = sql.split(";")[0] + ";"
                 
-            return sql
+            return sql.strip()
         except Exception as e:
             return f"-- ERROR: Model failure: {str(e)}"
 

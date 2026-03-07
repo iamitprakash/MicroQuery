@@ -13,9 +13,7 @@ class SchemaTeacher:
     def __init__(self, connection_string=None):
         self.connection_string = connection_string or os.getenv("DATABASE_URL")
         if not self.connection_string:
-            # Mock fallback for development
-            self.connection_string = "sqlite:///mock_data.db"
-            print(f"WARNING: DATABASE_URL not found. Using fallback: {self.connection_string}")
+            raise ValueError("DATABASE_URL environment variable is not set. Please check your .env file.")
         
         self.engine = create_engine(self.connection_string)
 
@@ -49,8 +47,8 @@ class SchemaTeacher:
         try:
             with self.engine.connect() as conn:
                 result = conn.execute(text(sql))
-                headers = result.keys()
-                rows = [dict(row._Mapping) for row in result]
+                headers = list(result.keys())
+                rows = [dict(r) for r in result.mappings()]
                 return {"success": True, "data": rows, "headers": headers}
         except Exception as e:
             return {"success": False, "error": str(e)}
