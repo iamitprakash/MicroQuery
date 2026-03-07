@@ -1,0 +1,6 @@
+psycopg2-binary
+langchain-community
+ollama
+streamlit
+python-dotenv
+sqlalchemy
