@@ -8,23 +8,15 @@ class MicromodelEngine:
     """
     def __init__(self, model_name="phi3.5:latest"):
         self.model_name = model_name
-        self._ensure_model()
         self.sql_cache = {} # Natural Language -> SQL
 
     def _ensure_model(self):
-        """Verify the model exists in Ollama, pull if missing."""
+        """Verify the model exists in Ollama."""
         try:
-            import ollama
             ollama.show(self.model_name)
+            return True
         except Exception:
-            print(f"[*] Micromodel '{self.model_name}' not found locally. Pulling...")
-            try:
-                import ollama
-                ollama.pull(self.model_name)
-            except Exception as e:
-                print(f"[!] Error pulling model: {e}")
-                import sys
-                sys.exit(1)
+            return False
 
     def get_relevant_tables(self, question, all_tables_list):
         """Step 1: Identify which tables are needed for the question."""
@@ -52,7 +44,11 @@ Output ONLY a comma-separated list of table names. No explanation."""
         """
         Translates natural language to SQL using Pruning and Caching.
         """
-        # 1. Check Cache
+        # 1. Runtime model check
+        if not self._ensure_model():
+            return f"-- ERROR: Model '{self.model_name}' not found in Ollama. Run 'ollama pull {self.model_name}'."
+
+        # 2. Check Cache
         if question in self.sql_cache:
             return self.sql_cache[question]
 
@@ -71,7 +67,10 @@ Generate valid PostgreSQL query based on the schema.
 ### Rules:
 1. Output RAW SQL only. No markdown.
 2. PostgreSQL syntax.
-3. Suggest chart: "-- CHART: <Bar|Line|Pie> | REASON: <Explanation>" if applicable.
+3. Always suggest a chart if numeric values exist. 
+   Formats: 
+   -- CHART: <Bar|Line|Area|Pie|Donut|Heatmap> | REASON: <Explanation>
+   Use Donut for composition, Heatmap for multi-metric correlations.
 """
 
         try:

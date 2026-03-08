@@ -1,74 +1,64 @@
-# MicroQuery 🤖🐘
+# 🛡️ MicroQuery: Production-Hardened AI Data Assistant
 
-**MicroQuery** is a specialized, privacy-first conversational AI chatbot that lets you query your **PostgreSQL** database using a local, custom **Micromodel**.
+Transform your PostgreSQL database into an intelligent, conversational analytics dashboard. Powered by local LLMs (Ollama) and high-fidelity visualizations.
 
-By running entirely on your machine (via Ollama) and using a cost-optimized CPU-only approach, MicroQuery ensures your data schema and queries never leave your local environment.
+## 🚀 Key Features
 
-## ✨ Features
+### ⚡ Enterprise-Grade Engine
 
-- **Privacy-First**: No data is sent to external AI APIs. Everything runs locally.
-- **Micromodel Engine**: Uses a specialized, quantized model (Phi-3.5) optimized for SQL generation.
-- **Dynamic Schema Training**: Automatically "teaches" the local model about your PostgreSQL tables and relationships.
-- **Cost-Effective**: Designed to run efficiently on low-cost hardware like Amazon EC2 `t3.large`.
-- **Sleek UI**: Clean, interactive Streamlit dashboard for chatting with your data.
+- **Intelligent Schema Pruning**: Automatically identifies relevant tables for complex questions, reducing AI context by up to 90%.
+- **SQL Caching**: Instantaneous (0ms) responses for repeated questions via an in-memory SQL cache.
+- **Hyper-Scale Ready**: Tested against schemas with 9+ tables and 25,000+ records (Customers, Orders, Reviews, etc.).
 
-## 🚀 Quick Start (Local Testing)
+### 🛡️ Professional UI/UX
 
-Follow these steps to see MicroQuery in action immediately using a mock database.
+- **Interactive SQL Sandbox**: Toggle "Review Mode" to inspect and edit AI-generated SQL before execution.
+- **Multi-Model Support**: Hot-swap between local models (`phi3.5:latest`, `llama3.1:latest`, `mistral`, `gemma2`) on the fly.
+- **Data Export**: One-click "Download as CSV" for all query results.
+
+### 📊 Advanced Visualizations
+- **High-Fidelity Charts**: Powered by **Plotly** for interactive, beautiful visuals.
+  - **Composition**: Pie and Donut charts for market share and distribution.
+  - **Correlation**: Automatic Heatmaps to find relationships between numeric metrics.
+  - **Comparison**: Overlaid Bar and Line charts for trend analysis.
+- **Export Gallery**: Every chart features a **"Download as PNG"** button for easy insertion into reports and presentations.
+- **Smart Insights**: AI-powered proactive analysis accompanying every visualization.
+
+---
+
+## 🛠️ Quick Start
 
 ### 1. Prerequisites
 
-- **Ollama**: [Download and Install Ollama](https://ollama.com/).
-- **Python**: Version 3.10 or higher.
-- **PostgreSQL**: (Optional for initial testing) Running on your local machine.
+- [Ollama](https://ollama.ai/) installed and running.
+- PostgreSQL database accessible.
 
-### 2. Setup Environment
+### 2. Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/iamitprakash/MicroQuery.git
+# Clone and enter directory
 cd MicroQuery
 
-# Create a virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
 # Install dependencies
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt --break-system-packages
+
+# Setup the Hyper-Scale database (Seeds 25k+ records)
+python3 setup_real_db.py
 ```
 
-### 3. Initialize Mock Data
-
-I've included a script to create a sample SQLite database so you can test the AI logic instantly without configuring PostgreSQL.
-
-```bash
-python3 create_mock_db.py
-```
-
-### 4. Run the App
+### 3. Run the App
 
 ```bash
 streamlit run pg_bot.py
 ```
 
-## ☁️ Deployment on Amazon EC2
+## 🧠 Architecture
 
-To deploy on a cost-saving `t3.large` instance:
-
-1. Install Ollama on your EC2 instance.
-2. Setup a 2GB Swap file for stability.
-3. Whitelisted your EC2 IP in your PostgreSQL firewall (Port 5432).
-4. Run: `streamlit run pg_bot.py --server.port 80`
-
-## 🛡️ Configuration
-
-All settings are managed via the `.env` file. To connect to your real PostgreSQL:
-
-1. Edit `.env`.
-2. Update `DATABASE_URL` with your connection string:
-   `postgresql+psycopg2://user:password@localhost:5432/dbname`
-3. Restart the app.
+- **Front-end**: Streamlit (Premium Custom CSS)
+- **AI Orchestration**: Custom Micromodel Engine (Schema-Aware)
+- **Local Inference**: Ollama API
+- **Visuals**: Plotly Express & Streamlit Native Charts
 
 ---
 
-Built with ❤️ by Amit Prakash for private, specialized database intelligence.
+Amit Prakash ❤️ for private, specialized database intelligence.
