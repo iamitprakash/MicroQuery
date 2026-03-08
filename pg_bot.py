@@ -109,6 +109,10 @@ if prompt := st.chat_input("Ask a question about your data..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
+        result = None
+        df = None
+        final_sql = ""
+
         with st.status("Solving using Micromodel...", expanded=True) as status:
             # 1. Generate SQL
             status.write(f"Generating SQL using {selected_model}...")
@@ -121,6 +125,11 @@ if prompt := st.chat_input("Ask a question about your data..."):
                 if not execute_btn:
                     st.info("Edit the SQL above and click 'Run Query'")
                     st.stop()
+                
+                # LEARNING: If the user edited the SQL, update the cache with the human-corrected version
+                if final_sql != generated_sql:
+                    engine.cache.store_sql(prompt, selected_model, final_sql)
+                    st.toast("Human correction saved to persistent cache! 🧠", icon="💾")
             else:
                 final_sql = generated_sql
 
@@ -142,119 +151,120 @@ if prompt := st.chat_input("Ask a question about your data..."):
                         for col in df.columns:
                             if df[col].apply(lambda x: isinstance(x, decimal.Decimal)).any():
                                 df[col] = df[col].astype(float)
-                    
-                    if df.empty:
-                        st.warning("📭 **No results found.** The query executed successfully but returned zero rows. Try adjusting your filters (e.g., check if the city name exists in the database).")
-                        # Add a helpful hint to show available cities if it was a city query
-                        if "city" in final_sql.lower():
-                            with st.expander("🔍 Check available cities"):
-                                city_check = teacher.execute("SELECT city, count(*) FROM customers GROUP BY city ORDER BY count(*) DESC LIMIT 5")
-                                if city_check["success"]:
-                                    st.write("Top cities in your database:")
-                                    st.table(pd.DataFrame(city_check["data"]))
-                    else:
-                        st.dataframe(df)
-                        
-                        # 3. Export Facility
-                        csv = df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="📥 Download as CSV",
-                            data=csv,
-                            file_name=f"query_result_{int(time.time())}.csv",
-                            mime='text/csv',
-                        )
-
-                        # 4. Proactive Visuals
-                        if len(df.columns) >= 2:
-                            num_cols = df.select_dtypes(include=['number']).columns.tolist()
-                            cat_cols = df.select_dtypes(exclude=['number', 'datetime']).columns.tolist()
-                            date_cols = df.select_dtypes(include=['datetime']).columns.tolist()
-                            
-                            if num_cols:
-                                with st.expander("📊 Proactive Data Insights", expanded=True):
-                                    with st.spinner("📈 Generating interactive visuals..."):
-                                        suggested_chart = "Bar"
-                                        reason = "Data visualization prepared for trend/distribution analysis."
-                                        
-                                        if "-- CHART:" in final_sql:
-                                            parts = final_sql.split("-- CHART:")[1].split("|")
-                                            suggested_chart = parts[0].strip()
-                                            if len(parts) > 1 and "REASON:" in parts[1]:
-                                                reason = parts[1].replace("REASON:", "").strip()
-                                        
-                                        tabs = st.tabs(["📊 Bar/Line", "🍩 Composition", "🔥 Correlation"])
-                                        
-                                        # Determine X-axis: Categorical -> Date -> Index
-                                        x_axis = None
-                                        if cat_cols: x_axis = cat_cols[0]
-                                        elif date_cols: x_axis = date_cols[0]
-                                        
-                                        # Metrics
-                                        y_axes = num_cols[:3]
-                                        chart_data = df.set_index(x_axis)[y_axes] if x_axis else df[y_axes]
-                                        
-                                        with tabs[0]:
-                                            st.subheader("Comparison Analysis")
-                                            fig_bar = px.bar(df, x=x_axis, y=y_axes, barmode="group", title="Metric Comparison (Bar)")
-                                            st.plotly_chart(fig_bar, use_container_width=True)
-                                            # CACHED PNG GENERATION
-                                            img_bar = get_plotly_image(df, "bar", x_axis, y_axes)
-                                            st.download_button(label="📥 Save Bar Chart as PNG", data=img_bar, file_name="bar_chart.png", mime="image/png")
-                                            
-                                            fig_line = px.line(df, x=x_axis, y=y_axes, title="Trend Analysis (Line)")
-                                            st.plotly_chart(fig_line, use_container_width=True)
-                                            # CACHED PNG GENERATION
-                                            img_line = get_plotly_image(df, "line", x_axis, y_axes)
-                                            st.download_button(label="📥 Save Line Chart as PNG", data=img_line, file_name="line_chart.png", mime="image/png")
-                                        
-                                        with tabs[1]:
-                                            if x_axis and len(num_cols) > 0:
-                                                fig_pie = px.pie(df, names=x_axis, values=num_cols[0], title="Market Share (Pie)")
-                                                st.plotly_chart(fig_pie, use_container_width=True)
-                                                # CACHED PNG GENERATION
-                                                img_pie = get_plotly_image(df, "pie", x_axis, num_cols)
-                                                st.download_button(label="📥 Save Pie Chart as PNG", data=img_pie, file_name="pie_chart.png", mime="image/png")
-                                                
-                                                fig_donut = px.pie(df, names=x_axis, values=num_cols[0], hole=0.5, title="Composition (Donut)")
-                                                st.plotly_chart(fig_donut, use_container_width=True)
-                                                # CACHED PNG GENERATION
-                                                img_donut = get_plotly_image(df, "donut", x_axis, num_cols)
-                                                st.download_button(label="📥 Save Donut Chart as PNG", data=img_donut, file_name="donut_chart.png", mime="image/png")
-                                            else:
-                                                st.warning("Pie/Donut requires a categorical column and a numeric value.")
-                                        
-                                        with tabs[2]:
-                                            if len(num_cols) >= 2:
-                                                corr_df = df[num_cols].corr()
-                                                fig_heat = px.imshow(corr_df, text_auto=True, title="Metric Correlation Heatmap", aspect="auto")
-                                                st.plotly_chart(fig_heat, use_container_width=True)
-                                                # CACHED PNG GENERATION
-                                                img_heat = get_plotly_image(df, "heatmap", None, num_cols)
-                                                st.download_button(label="📥 Save Heatmap as PNG", data=img_heat, file_name="heatmap.png", mime="image/png")
-                                            else:
-                                                st.warning("Heatmap requires multiple numeric metrics to analyze correlation.")
-
-                    # History
-                    st.session_state.messages.append({
-                        "role": "assistant", 
-                        "content": "I've analyzed the data for you:",
-                        "sql": final_sql,
-                        "data": result["data"],
-                        "question": prompt,
-                        "model": selected_model
-                    })
-
-                    # 5. Feedback Loop
-                    c1, c2, c3 = st.columns([1,1,10])
-                    with c1:
-                        if st.button("👍", key=f"up_{int(time.time())}"):
-                            engine.cache.update_feedback(prompt, selected_model, 1)
-                            st.toast("Thanks for the feedback!", icon="✅")
-                    with c2:
-                        if st.button("👎", key=f"down_{int(time.time())}"):
-                            engine.cache.update_feedback(prompt, selected_model, -1)
-                            st.toast("Feedback recorded. I'll try to improve.", icon="⚠️")
                 else:
                     st.error(f"SQL Error: {result['error']}")
                     st.code(final_sql, language="sql")
                     status.update(label="Execution Failed", state="error")
+
+        # 3. Render Results (Outside status block for visibility)
+        if result and result["success"]:
+            if df.empty:
+                st.warning("📭 **No results found.** The query executed successfully but returned zero rows. Try adjusting your filters.")
+                if "city" in final_sql.lower():
+                    with st.expander("🔍 Check available cities"):
+                        city_check = teacher.execute("SELECT city, count(*) FROM customers GROUP BY city ORDER BY count(*) DESC LIMIT 5")
+                        if city_check["success"]:
+                            st.write("Top cities in your database:")
+                            st.table(pd.DataFrame(city_check["data"]))
+            else:
+                st.dataframe(df)
+                
+                # Export Facility
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download as CSV",
+                    data=csv,
+                    file_name=f"query_result_{int(time.time())}.csv",
+                    mime='text/csv',
+                )
+
+                # 4. Proactive Visuals
+                if len(df.columns) >= 2:
+                    num_cols = df.select_dtypes(include=['number']).columns.tolist()
+                    cat_cols = df.select_dtypes(exclude=['number', 'datetime']).columns.tolist()
+                    date_cols = df.select_dtypes(include=['datetime']).columns.tolist()
+                    
+                    if num_cols:
+                        with st.expander("📊 Proactive Data Insights", expanded=True):
+                            with st.spinner("📈 Generating interactive visuals..."):
+                                suggested_chart = "Bar"
+                                reason = "Data visualization prepared for trend/distribution analysis."
+                                
+                                if "-- CHART:" in final_sql:
+                                    parts = final_sql.split("-- CHART:")[1].split("|")
+                                    suggested_chart = parts[0].strip()
+                                    if len(parts) > 1 and "REASON:" in parts[1]:
+                                        reason = parts[1].replace("REASON:", "").strip()
+                                
+                                tabs = st.tabs(["📊 Bar/Line", "🍩 Composition", "🔥 Correlation"])
+                                
+                                # Determine X-axis
+                                x_axis = cat_cols[0] if cat_cols else (date_cols[0] if date_cols else None)
+                                y_axes = num_cols[:3]
+                                
+                                with tabs[0]:
+                                    st.subheader("Comparison Analysis")
+                                    fig_bar = px.bar(df, x=x_axis, y=y_axes, barmode="group", title="Metric Comparison (Bar)")
+                                    st.plotly_chart(fig_bar, use_container_width=True)
+                                    img_bar = get_plotly_image(df, "bar", x_axis, y_axes)
+                                    st.download_button(label="📥 Save Bar Chart as PNG", data=img_bar, file_name="bar_chart.png", mime="image/png")
+                                    
+                                    fig_line = px.line(df, x=x_axis, y=y_axes, title="Trend Analysis (Line)")
+                                    st.plotly_chart(fig_line, use_container_width=True)
+                                    img_line = get_plotly_image(df, "line", x_axis, y_axes)
+                                    st.download_button(label="📥 Save Line Chart as PNG", data=img_line, file_name="line_chart.png", mime="image/png")
+                                
+                                with tabs[1]:
+                                    if x_axis and len(num_cols) > 0:
+                                        fig_pie = px.pie(df, names=x_axis, values=num_cols[0], title="Market Share (Pie)")
+                                        st.plotly_chart(fig_pie, use_container_width=True)
+                                        img_pie = get_plotly_image(df, "pie", x_axis, num_cols)
+                                        st.download_button(label="📥 Save Pie Chart as PNG", data=img_pie, file_name="pie_chart.png", mime="image/png")
+                                        
+                                        fig_donut = px.pie(df, names=x_axis, values=num_cols[0], hole=0.5, title="Composition (Donut)")
+                                        st.plotly_chart(fig_donut, use_container_width=True)
+                                        img_donut = get_plotly_image(df, "donut", x_axis, num_cols)
+                                        st.download_button(label="📥 Save Donut Chart as PNG", data=img_donut, file_name="donut_chart.png", mime="image/png")
+                                    else:
+                                        st.warning("Pie/Donut requires a categorical column and a numeric value.")
+                                
+                                with tabs[2]:
+                                    if len(num_cols) >= 2:
+                                        fig_heat = px.imshow(df[num_cols].corr(), text_auto=True, title="Metric Correlation Heatmap", aspect="auto")
+                                        st.plotly_chart(fig_heat, use_container_width=True)
+                                        img_heat = get_plotly_image(df, "heatmap", None, num_cols)
+                                        st.download_button(label="📥 Save Heatmap as PNG", data=img_heat, file_name="heatmap.png", mime="image/png")
+                                    else:
+                                        st.warning("Heatmap requires multiple numeric metrics to analyze correlation.")
+
+            # History & Feedback
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": "I've analyzed the data for you:",
+                "sql": final_sql,
+                "data": result["data"],
+                "question": prompt,
+                "model": selected_model
+            })
+
+            c1, c2, c3 = st.columns([1,1,10])
+            with c1:
+                if st.button("👍", key=f"up_{int(time.time())}"):
+                    engine.cache.update_feedback(prompt, selected_model, 1)
+                    st.toast("Thanks for the feedback!", icon="✅")
+            with c2:
+                if st.button("👎", key=f"down_{int(time.time())}"):
+                    engine.cache.update_feedback(prompt, selected_model, -1)
+                    st.toast("Feedback recorded.", icon="⚠️")
+
+# 🛡️ System Administration (Footer)
+st.divider()
+with st.expander("🛡️ System Activity & Cache Explorer"):
+    st.info("The AI caches generated SQL in a local **SQLite** database for privacy and speed. This is separate from your main **PostgreSQL** data.")
+    all_cache = engine.cache.get_all_cache()
+    if all_cache:
+        cache_df = pd.DataFrame(all_cache)
+        st.dataframe(cache_df, use_container_width=True)
+    else:
+        st.write("Cache is currently empty.")
+

@@ -51,3 +51,12 @@ class CacheManager:
                 )
         except Exception as e:
             print(f"Feedback update error: {e}")
+    def get_all_cache(self):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("SELECT * FROM sql_cache ORDER BY timestamp DESC")
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            print(f"Cache list error: {e}")
+            return []
