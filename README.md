@@ -28,10 +28,10 @@ Transform your PostgreSQL database into an intelligent, conversational analytics
 ## 📸 Visual Showcase
 
 ### Interactive Analysis & Reporting
-![Comparison Analysis Dashboard](/Users/amitprakash/.gemini/antigravity/brain/97a2cc7d-eb29-4463-a7e9-d05957c07dd7/dashboard_bar_line.png)
+![Comparison Analysis Dashboard](assets/dashboard_bar_line.png)
 
 ### Holistic Data Composition
-![Data Composition Dashboard](/Users/amitprakash/.gemini/antigravity/brain/97a2cc7d-eb29-4463-a7e9-d05957c07dd7/dashboard_pie_donut.png)
+![Data Composition Dashboard](assets/dashboard_pie_donut.png)
 
 ---
 
