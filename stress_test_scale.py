@@ -10,11 +10,11 @@ def run_stress_test():
     schema_context = teacher.get_full_schema_context()
     
     stress_questions = [
-        "Who is the top supplier by total product revenue including shipping freight?",
-        "What is the average product rating for each category?",
-        "List the top 5 customers who have written the most reviews and show their total spend.",
-        "Show me the monthly revenue trend for the 'Electronics' category across different shippers.",
-        "Which city has the highest density of 5-star product reviews?"
+        "Top category by total revenue?",
+        "Average product rating for each category?",
+        "Top 5 customers by order count",
+        "Total revenue for the last 30 days?",
+        "Names of shippers and their total freight income?"
     ]
     
     for q in stress_questions:

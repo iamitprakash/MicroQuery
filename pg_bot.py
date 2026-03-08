@@ -3,6 +3,7 @@ import pandas as pd
 from schema_teacher import SchemaTeacher
 from micromodel_engine import MicromodelEngine
 import os
+import time
 from dotenv import load_dotenv
 
 # Page configuration
@@ -31,32 +32,40 @@ st.markdown("""
 
 # Initialize components
 @st.cache_resource
-def get_components():
-    load_dotenv()
-    teacher = SchemaTeacher()
-    engine = MicromodelEngine()
-    return teacher, engine
+def get_engine(model_name):
+    return MicromodelEngine(model_name=model_name)
 
-try:
-    teacher, engine = get_components()
-    schema_context = teacher.get_full_schema_context()
-except Exception as e:
-    st.error(f"Failed to initialize: {e}")
-    st.info("Check your DATABASE_URL in the .env file.")
-    st.stop()
+@st.cache_resource
+def get_teacher():
+    return SchemaTeacher()
 
-# UI Layout
-st.title("🛡️ PostgreSQL Micromodel Chatbot")
-st.subheader("Query your private database using a specialized local model")
-
+# Sidebar controls
 with st.sidebar:
-    st.header("Database Insight")
-    if st.checkbox("Show Schema 'Taught' to Model"):
-        st.code(schema_context, language="markdown")
+    st.header("⚙️ Settings")
+    
+    # 1. Model Selector
+    available_models = ["phi3.5", "llama3", "mistral", "gemma2"]
+    selected_model = st.selectbox("Select Model (Ollama)", available_models, index=0)
+    
+    # 2. Review Mode
+    review_mode = st.toggle("🛡️ Review Mode (Edit SQL)", value=False)
     
     st.divider()
-    st.caption("Running locally via Ollama")
-    st.caption("Base Model: Phi-3.5")
+    st.header("🔍 Database Insight")
+    teacher = get_teacher()
+    engine = get_engine(selected_model)
+    
+    if st.checkbox("Show Compact Schema"):
+        st.code(teacher.get_full_schema_context(), language="markdown")
+    
+    st.divider()
+    if st.button("🧹 Clear Conversation"):
+        st.session_state.messages = []
+        st.rerun()
+
+# UI Layout
+st.title("Amit Prakash's Micromodel Chatbot")
+st.subheader("Query your hyper-scale database with intelligent visuals")
 
 # Chat Interface
 if "messages" not in st.session_state:
@@ -81,67 +90,74 @@ if prompt := st.chat_input("Ask a question about your data..."):
     with st.chat_message("assistant"):
         with st.status("Solving using Micromodel...", expanded=True) as status:
             # 1. Generate SQL
-            status.write("Generating T-SQL query...")
-            generated_sql = engine.generate_sql(prompt, schema_context)
+            status.write(f"Generating SQL using {selected_model}...")
+            generated_sql = engine.generate_sql(prompt, teacher)
             
-            if "-- ERROR" in generated_sql:
-                st.error(generated_sql)
+            # Handle Review Mode
+            if review_mode:
+                final_sql = st.text_area("Review/Edit Generated SQL:", value=generated_sql, height=150)
+                execute_btn = st.button("🚀 Run Query", key=f"run_{prompt[:10]}")
+                if not execute_btn:
+                    st.info("Edit the SQL above and click 'Run Query'")
+                    st.stop()
+            else:
+                final_sql = generated_sql
+
+            if "-- ERROR" in final_sql:
+                st.error(final_sql)
                 status.update(label="Generation Failed", state="error")
             else:
-                status.write("Executing on MSSQL...")
                 # 2. Execute SQL
-                result = teacher.execute(generated_sql)
+                status.write("Executing on PostgreSQL...")
+                result = teacher.execute(final_sql)
                 
                 if result["success"]:
                     status.update(label="Success!", state="complete")
-                    st.dataframe(pd.DataFrame(result["data"]))
-                    st.session_state.messages.append({
-                        "role": "assistant", 
-                        "content": "Here is what I found:",
-                        "sql": generated_sql,
-                        "data": result["data"]
-                    })
-
-                    # 3. Visualization logic
                     df = pd.DataFrame(result["data"])
+                    st.dataframe(df)
+                    
+                    # 3. Export Facility
+                    csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Download as CSV",
+                        data=csv,
+                        file_name=f"query_result_{int(time.time())}.csv",
+                        mime='text/csv',
+                    )
+
+                    # 4. Proactive Visuals
                     if not df.empty and len(df.columns) >= 2:
                         num_cols = df.select_dtypes(include=['number']).columns.tolist()
                         cat_cols = df.select_dtypes(exclude=['number']).columns.tolist()
                         
                         if num_cols and cat_cols:
                             with st.expander("📊 Proactive Data Insights", expanded=True):
-                                # Detect chart type and reason suggestion from SQL
                                 suggested_chart = "Bar"
-                                reason = "I've detected categorical and numeric data suitable for comparison."
+                                reason = "Data distribution comparison detected."
                                 
-                                if "-- CHART:" in generated_sql:
-                                    parts = generated_sql.split("-- CHART:")[1].split("|")
+                                if "-- CHART:" in final_sql:
+                                    parts = final_sql.split("-- CHART:")[1].split("|")
                                     suggested_chart = parts[0].strip()
                                     if len(parts) > 1 and "REASON:" in parts[1]:
                                         reason = parts[1].replace("REASON:", "").strip()
                                 
-                                if reason:
-                                    st.info(f"💡 **Smart Insight:** {reason}")
-                                
-                                # Map suggested chart to tab index
-                                tab_index = 0
-                                if suggested_chart == "Line": tab_index = 1
-                                elif suggested_chart == "Pie": tab_index = 2
-                                
+                                st.info(f"💡 **Insight:** {reason}")
                                 tabs = st.tabs(["Bar Chart", "Line Chart", "Pie Chart"])
-                                
-                                x_axis = cat_cols[0]
-                                y_axis = num_cols[0]
-                                
                                 with tabs[0]:
-                                    st.bar_chart(df.set_index(x_axis)[y_axis])
+                                    st.bar_chart(df.set_index(cat_cols[0])[num_cols[0]])
                                 with tabs[1]:
-                                    st.line_chart(df.set_index(x_axis)[y_axis])
+                                    st.line_chart(df.set_index(cat_cols[0])[num_cols[0]])
                                 with tabs[2]:
-                                    st.info("Pie Chart optimization: Best for composition analytics.")
-                                    # Plotly would be better here but staying with native for now
-                                    st.bar_chart(df.set_index(x_axis)[y_axis])
+                                    st.info("Pie Chart optimization recommended for this dataset.")
+
+                    # History
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": "I've analyzed the data for you:",
+                        "sql": final_sql,
+                        "data": result["data"]
+                    })
                 else:
-                    st.error(f"SQL Execution Error: {result['error']}")
-                    st.code(generated_sql, language="sql")
+                    st.error(f"SQL Error: {result['error']}")
+                    st.code(final_sql, language="sql")
                     status.update(label="Execution Failed", state="error")

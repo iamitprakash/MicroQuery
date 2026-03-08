@@ -9,68 +9,98 @@ class MicromodelEngine:
     def __init__(self, model_name="phi3.5:latest"):
         self.model_name = model_name
         self._ensure_model()
+        self.sql_cache = {} # Natural Language -> SQL
 
     def _ensure_model(self):
         """Verify the model exists in Ollama, pull if missing."""
         try:
+            import ollama
             ollama.show(self.model_name)
         except Exception:
-            print(f"[*] Micromodel '{self.model_name}' not found locally. Pulling... (Please wait)")
+            print(f"[*] Micromodel '{self.model_name}' not found locally. Pulling...")
             try:
+                import ollama
                 ollama.pull(self.model_name)
             except Exception as e:
                 print(f"[!] Error pulling model: {e}")
+                import sys
                 sys.exit(1)
 
-    def generate_sql(self, question, schema_context):
-        """
-        Translates natural language to T-SQL using the micromodel.
-        """
-        system_prompt = f"""You are a specialized Text-to-SQL micromodel. 
-Your task is to generate a valid MSSQL (T-SQL) query based on the user's question and the provided schema.
+    def get_relevant_tables(self, question, all_tables_list):
+        """Step 1: Identify which tables are needed for the question."""
+        prompt = f"""Identify the minimal set of database tables required to answer this question.
+Question: {question}
+Available Tables: {', '.join(all_tables_list)}
 
-### Database Schema Context:
+Output ONLY a comma-separated list of table names. No explanation."""
+        
+        try:
+            import ollama
+            response = ollama.chat(
+                model=self.model_name,
+                messages=[{'role': 'user', 'content': prompt}],
+                options={'temperature': 0}
+            )
+            tables_str = response['message']['content'].strip()
+            # Clean up and validate
+            found_tables = [t.strip() for t in tables_str.split(',') if t.strip() in all_tables_list]
+            return found_tables if found_tables else all_tables_list
+        except:
+            return all_tables_list
+
+    def generate_sql(self, question, teacher):
+        """
+        Translates natural language to SQL using Pruning and Caching.
+        """
+        # 1. Check Cache
+        if question in self.sql_cache:
+            return self.sql_cache[question]
+
+        # 2. Schema Pruning
+        from sqlalchemy import inspect
+        all_tables = inspect(teacher.engine).get_table_names()
+        relevant_tables = self.get_relevant_tables(question, all_tables)
+        schema_context = teacher.get_table_schema_context(relevant_tables)
+
+        system_prompt = f"""You are a specialized Text-to-SQL micromodel. 
+Generate valid PostgreSQL query based on the schema.
+
+### Schema:
 {schema_context}
 
 ### Rules:
-1. Output ONLY the raw SQL code. No explanation, no markdown backticks.
-2. If the user asks for something that cannot be answered by the schema, respond with "-- ERROR: Schema doesn't contain this data".
-3. Use standard PostgreSQL syntax (use double quotes for identifiers only if necessary).
-4. Ensure the query is compatible with PostgreSQL.
-5. If the result set is likely to have at least one numeric column and one categorical/date column, append a suggestion for visualization at the end of the SQL in the format: "-- CHART: <Bar|Line|Pie> | REASON: <One short sentence explaining why this chart helps>"
+1. Output RAW SQL only. No markdown.
+2. PostgreSQL syntax.
+3. Suggest chart: "-- CHART: <Bar|Line|Pie> | REASON: <Explanation>" if applicable.
 """
 
         try:
+            import ollama
             response = ollama.chat(
                 model=self.model_name,
                 messages=[
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': question}
                 ],
-                options={'temperature': 0} # Deterministic for SQL
+                options={'temperature': 0}
             )
             
             sql = response['message']['content'].strip()
-            # Clean up unintended markdown
             sql = sql.replace("```sql", "").replace("```", "").strip()
             if sql.lower().startswith("sql"):
                 sql = sql[3:].strip()
             
-            # Extract only the first SQL statement if model appends explanation
-            # Look for common explanation starters or double newlines
+            # Simple extractor for SQL statements
             import re
-            # Split by double newline and take the first part if it looks like SQL
             parts = re.split(r'\n\s*\n', sql)
-            if parts:
-                first_part = parts[0].strip()
-                if first_part.upper().startswith(("SELECT", "WITH", "INSERT", "UPDATE", "DELETE")):
-                     sql = first_part
-
-            # Also ensure we cut off at the first semicolon followed by a newline
+            if parts and parts[0].upper().startswith(("SELECT", "WITH")):
+                 sql = parts[0]
             if ";" in sql:
                 sql = sql.split(";")[0] + ";"
-                
-            return sql.strip()
+            
+            final_sql = sql.strip()
+            self.sql_cache[question] = final_sql # Cache it
+            return final_sql
         except Exception as e:
             return f"-- ERROR: Model failure: {str(e)}"
 
