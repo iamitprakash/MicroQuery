@@ -6,23 +6,24 @@ Transform your PostgreSQL database into an intelligent, conversational analytics
 
 ### ⚡ Enterprise-Grade Engine
 
+- **Persistent SQL Caching**: AI "remembers" successful queries in a local **SQLite** database (`query_cache.db`), making repeat questions instant.
+- **Human-in-the-Loop Learning**: If you edit SQL in **Review Mode**, the system saves your correction to the cache, effectively "learning" from your expertise.
 - **Intelligent Schema Pruning**: Automatically identifies relevant tables for complex questions, reducing AI context by up to 90%.
-- **SQL Caching**: Instantaneous (0ms) responses for repeated questions via an in-memory SQL cache.
-- **Hyper-Scale Ready**: Tested against schemas with 9+ tables and 25,000+ records (Customers, Orders, Reviews, etc.).
+- **Hyper-Scale Ready**: Tested against schemas with 9+ tables and 25,000+ records.
 
-### 🛡️ Professional UI/UX
+### 🛡️ Professional UI & Analytics
 
+- **🔍 Interactive Drill-Downs**: Use sidebar multiselect filters to live-filter charts and tables simultaneously.
 - **Interactive SQL Sandbox**: Toggle "Review Mode" to inspect and edit AI-generated SQL before execution.
-- **Multi-Model Support**: Hot-swap between local models (`phi3.5:latest`, `llama3.1:latest`, `mistral`, `gemma2`) on the fly.
-- **Data Export**: One-click "Download as CSV" for all query results.
+- **Multi-Model Support**: Hot-swap between local models (`phi3.5`, `llama3.1`, etc.) on the fly.
+- **🛡️ System Explorer**: Expand the footer to peer into the AI's "memory" (cache history and feedback).
 
 ### 📊 Advanced Visualizations
 - **High-Fidelity Charts**: Powered by **Plotly** for interactive, beautiful visuals.
   - **Composition**: Pie and Donut charts for market share and distribution.
   - **Correlation**: Automatic Heatmaps to find relationships between numeric metrics.
   - **Comparison**: Overlaid Bar and Line charts for trend analysis.
-- **Export Gallery**: Every chart features a **"Download as PNG"** button for easy insertion into reports and presentations.
-- **Smart Insights**: AI-powered proactive analysis accompanying every visualization.
+- **Export Gallery**: Every chart features a **"Download as PNG"** button. The main result can be exported via **"Download Filtered CSV"**.
 
 ---
 
