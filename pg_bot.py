@@ -5,6 +5,25 @@ from micromodel_engine import MicromodelEngine
 import os
 import time
 import plotly.express as px
+
+@st.cache_data
+def get_plotly_image(df, chart_type, x_axis, y_axes):
+    """Generates Plotly PNG bytes with caching to prevent UI lag."""
+    if chart_type == "bar":
+        fig = px.bar(df, x=x_axis, y=y_axes, barmode="group", title="Metric Comparison (Bar)")
+    elif chart_type == "line":
+        fig = px.line(df, x=x_axis, y=y_axes, title="Trend Analysis (Line)")
+    elif chart_type == "pie":
+        fig = px.pie(df, names=x_axis, values=y_axes[0], title="Market Share (Pie)")
+    elif chart_type == "donut":
+        fig = px.pie(df, names=x_axis, values=y_axes[0], hole=0.5, title="Composition (Donut)")
+    elif chart_type == "heatmap":
+        corr_df = df[y_axes].corr()
+        fig = px.imshow(corr_df, text_auto=True, title="Metric Correlation Heatmap", aspect="auto")
+    else:
+        return None
+    
+    return fig.to_image(format="png")
 from dotenv import load_dotenv
 
 # Page configuration
@@ -178,29 +197,29 @@ if prompt := st.chat_input("Ask a question about your data..."):
                                             st.subheader("Comparison Analysis")
                                             fig_bar = px.bar(df, x=x_axis, y=y_axes, barmode="group", title="Metric Comparison (Bar)")
                                             st.plotly_chart(fig_bar, use_container_width=True)
-                                            with st.spinner("💾 Preparing PNG export..."):
-                                                img_bar = fig_bar.to_image(format="png")
-                                                st.download_button(label="📥 Save Bar Chart as PNG", data=img_bar, file_name="bar_chart.png", mime="image/png")
+                                            # CACHED PNG GENERATION
+                                            img_bar = get_plotly_image(df, "bar", x_axis, y_axes)
+                                            st.download_button(label="📥 Save Bar Chart as PNG", data=img_bar, file_name="bar_chart.png", mime="image/png")
                                             
                                             fig_line = px.line(df, x=x_axis, y=y_axes, title="Trend Analysis (Line)")
                                             st.plotly_chart(fig_line, use_container_width=True)
-                                            with st.spinner("💾 Preparing PNG export..."):
-                                                img_line = fig_line.to_image(format="png")
-                                                st.download_button(label="📥 Save Line Chart as PNG", data=img_line, file_name="line_chart.png", mime="image/png")
+                                            # CACHED PNG GENERATION
+                                            img_line = get_plotly_image(df, "line", x_axis, y_axes)
+                                            st.download_button(label="📥 Save Line Chart as PNG", data=img_line, file_name="line_chart.png", mime="image/png")
                                         
                                         with tabs[1]:
                                             if x_axis and len(num_cols) > 0:
                                                 fig_pie = px.pie(df, names=x_axis, values=num_cols[0], title="Market Share (Pie)")
                                                 st.plotly_chart(fig_pie, use_container_width=True)
-                                                with st.spinner("💾 Preparing PNG export..."):
-                                                    img_pie = fig_pie.to_image(format="png")
-                                                    st.download_button(label="📥 Save Pie Chart as PNG", data=img_pie, file_name="pie_chart.png", mime="image/png")
+                                                # CACHED PNG GENERATION
+                                                img_pie = get_plotly_image(df, "pie", x_axis, num_cols)
+                                                st.download_button(label="📥 Save Pie Chart as PNG", data=img_pie, file_name="pie_chart.png", mime="image/png")
                                                 
                                                 fig_donut = px.pie(df, names=x_axis, values=num_cols[0], hole=0.5, title="Composition (Donut)")
                                                 st.plotly_chart(fig_donut, use_container_width=True)
-                                                with st.spinner("💾 Preparing PNG export..."):
-                                                    img_donut = fig_donut.to_image(format="png")
-                                                    st.download_button(label="📥 Save Donut Chart as PNG", data=img_donut, file_name="donut_chart.png", mime="image/png")
+                                                # CACHED PNG GENERATION
+                                                img_donut = get_plotly_image(df, "donut", x_axis, num_cols)
+                                                st.download_button(label="📥 Save Donut Chart as PNG", data=img_donut, file_name="donut_chart.png", mime="image/png")
                                             else:
                                                 st.warning("Pie/Donut requires a categorical column and a numeric value.")
                                         
@@ -209,9 +228,9 @@ if prompt := st.chat_input("Ask a question about your data..."):
                                                 corr_df = df[num_cols].corr()
                                                 fig_heat = px.imshow(corr_df, text_auto=True, title="Metric Correlation Heatmap", aspect="auto")
                                                 st.plotly_chart(fig_heat, use_container_width=True)
-                                                with st.spinner("💾 Preparing PNG export..."):
-                                                    img_heat = fig_heat.to_image(format="png")
-                                                    st.download_button(label="📥 Save Heatmap as PNG", data=img_heat, file_name="heatmap.png", mime="image/png")
+                                                # CACHED PNG GENERATION
+                                                img_heat = get_plotly_image(df, "heatmap", None, num_cols)
+                                                st.download_button(label="📥 Save Heatmap as PNG", data=img_heat, file_name="heatmap.png", mime="image/png")
                                             else:
                                                 st.warning("Heatmap requires multiple numeric metrics to analyze correlation.")
 
