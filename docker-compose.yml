@@ -1,27 +1,19 @@
 version: '3.8'
 
 services:
-  app:
+  microquery:
     build: .
     ports:
       - "8501:8501"
-    env_file:
-      - .env
+    environment:
+      - DB_HOST=${DB_HOST:-localhost}
+      - DB_NAME=${DB_NAME:-northwind}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASS=${DB_PASS:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
     volumes:
       - ./query_cache.db:/app/query_cache.db
-    depends_on:
-      - db
+    restart: always
 
-  db:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: microquery_db
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secret_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
+# Note: This assumes Postgres and Ollama are running on the host or in their own containers.
+# To link them, you would add more services here.

@@ -167,22 +167,39 @@ if prompt := st.chat_input("Ask a question about your data..."):
                             st.write("Top cities in your database:")
                             st.table(pd.DataFrame(city_check["data"]))
             else:
-                st.dataframe(df)
+                # 3. Interactive Drill-Downs
+                cat_cols = df.select_dtypes(exclude=['number', 'datetime']).columns.tolist()
+                filtered_df = df.copy()
                 
-                # Export Facility
-                csv = df.to_csv(index=False).encode('utf-8')
+                if cat_cols:
+                    primary_dim = cat_cols[0]
+                    with st.sidebar.expander("🔍 Interactive Drill-Down", expanded=True):
+                        st.write(f"Filter by **{primary_dim}**:")
+                        unique_vals = sorted(df[primary_dim].unique().tolist())
+                        selected_vals = st.multiselect("Select values to focus on:", unique_vals, default=unique_vals)
+                        
+                        if selected_vals:
+                            filtered_df = df[df[primary_dim].isin(selected_vals)]
+                        else:
+                            st.warning("Please select at least one value.")
+                            filtered_df = df.iloc[0:0] # Empty but keeps schema
+
+                st.dataframe(filtered_df, use_container_width=True)
+                
+                # Export Facility (Filtered)
+                csv = filtered_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="📥 Download as CSV",
+                    label="📥 Download Filtered CSV",
                     data=csv,
-                    file_name=f"query_result_{int(time.time())}.csv",
+                    file_name=f"filtered_result_{int(time.time())}.csv",
                     mime='text/csv',
                 )
 
                 # 4. Proactive Visuals
-                if len(df.columns) >= 2:
-                    num_cols = df.select_dtypes(include=['number']).columns.tolist()
-                    cat_cols = df.select_dtypes(exclude=['number', 'datetime']).columns.tolist()
-                    date_cols = df.select_dtypes(include=['datetime']).columns.tolist()
+                if not filtered_df.empty and len(filtered_df.columns) >= 2:
+                    num_cols = filtered_df.select_dtypes(include=['number']).columns.tolist()
+                    cat_cols = filtered_df.select_dtypes(exclude=['number', 'datetime']).columns.tolist()
+                    date_cols = filtered_df.select_dtypes(include=['datetime']).columns.tolist()
                     
                     if num_cols:
                         with st.expander("📊 Proactive Data Insights", expanded=True):
@@ -204,35 +221,36 @@ if prompt := st.chat_input("Ask a question about your data..."):
                                 
                                 with tabs[0]:
                                     st.subheader("Comparison Analysis")
-                                    fig_bar = px.bar(df, x=x_axis, y=y_axes, barmode="group", title="Metric Comparison (Bar)")
+                                    fig_bar = px.bar(filtered_df, x=x_axis, y=y_axes, barmode="group", title="Metric Comparison (Bar)")
                                     st.plotly_chart(fig_bar, use_container_width=True)
-                                    img_bar = get_plotly_image(df, "bar", x_axis, y_axes)
+                                    # Use filtered_df for cached image
+                                    img_bar = get_plotly_image(filtered_df, "bar", x_axis, y_axes)
                                     st.download_button(label="📥 Save Bar Chart as PNG", data=img_bar, file_name="bar_chart.png", mime="image/png")
                                     
-                                    fig_line = px.line(df, x=x_axis, y=y_axes, title="Trend Analysis (Line)")
+                                    fig_line = px.line(filtered_df, x=x_axis, y=y_axes, title="Trend Analysis (Line)")
                                     st.plotly_chart(fig_line, use_container_width=True)
-                                    img_line = get_plotly_image(df, "line", x_axis, y_axes)
+                                    img_line = get_plotly_image(filtered_df, "line", x_axis, y_axes)
                                     st.download_button(label="📥 Save Line Chart as PNG", data=img_line, file_name="line_chart.png", mime="image/png")
                                 
                                 with tabs[1]:
                                     if x_axis and len(num_cols) > 0:
-                                        fig_pie = px.pie(df, names=x_axis, values=num_cols[0], title="Market Share (Pie)")
+                                        fig_pie = px.pie(filtered_df, names=x_axis, values=num_cols[0], title="Market Share (Pie)")
                                         st.plotly_chart(fig_pie, use_container_width=True)
-                                        img_pie = get_plotly_image(df, "pie", x_axis, num_cols)
+                                        img_pie = get_plotly_image(filtered_df, "pie", x_axis, num_cols)
                                         st.download_button(label="📥 Save Pie Chart as PNG", data=img_pie, file_name="pie_chart.png", mime="image/png")
                                         
-                                        fig_donut = px.pie(df, names=x_axis, values=num_cols[0], hole=0.5, title="Composition (Donut)")
+                                        fig_donut = px.pie(filtered_df, names=x_axis, values=num_cols[0], hole=0.5, title="Composition (Donut)")
                                         st.plotly_chart(fig_donut, use_container_width=True)
-                                        img_donut = get_plotly_image(df, "donut", x_axis, num_cols)
+                                        img_donut = get_plotly_image(filtered_df, "donut", x_axis, num_cols)
                                         st.download_button(label="📥 Save Donut Chart as PNG", data=img_donut, file_name="donut_chart.png", mime="image/png")
                                     else:
                                         st.warning("Pie/Donut requires a categorical column and a numeric value.")
                                 
                                 with tabs[2]:
                                     if len(num_cols) >= 2:
-                                        fig_heat = px.imshow(df[num_cols].corr(), text_auto=True, title="Metric Correlation Heatmap", aspect="auto")
+                                        fig_heat = px.imshow(filtered_df[num_cols].corr(), text_auto=True, title="Metric Correlation Heatmap", aspect="auto")
                                         st.plotly_chart(fig_heat, use_container_width=True)
-                                        img_heat = get_plotly_image(df, "heatmap", None, num_cols)
+                                        img_heat = get_plotly_image(filtered_df, "heatmap", None, num_cols)
                                         st.download_button(label="📥 Save Heatmap as PNG", data=img_heat, file_name="heatmap.png", mime="image/png")
                                     else:
                                         st.warning("Heatmap requires multiple numeric metrics to analyze correlation.")
@@ -242,7 +260,7 @@ if prompt := st.chat_input("Ask a question about your data..."):
                 "role": "assistant", 
                 "content": "I've analyzed the data for you:",
                 "sql": final_sql,
-                "data": result["data"],
+                "data": filtered_df.to_dict('records') if not filtered_df.empty else [],
                 "question": prompt,
                 "model": selected_model
             })
