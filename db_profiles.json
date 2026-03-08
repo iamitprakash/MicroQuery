@@ -1,0 +1,18 @@
+[
+    {
+        "name": "Production (Live Data)",
+        "host": "localhost",
+        "database": "mydatabase",
+        "user": "postgres",
+        "pass": "NewStrongPassword",
+        "port": 5432
+    },
+    {
+        "name": "Development (Staging)",
+        "host": "localhost",
+        "database": "staging_db",
+        "user": "postgres",
+        "pass": "NewStrongPassword",
+        "port": 5432
+    }
+]

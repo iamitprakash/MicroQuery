@@ -6,6 +6,12 @@ import os
 import time
 import plotly.express as px
 
+import json
+
+def load_db_profiles():
+    with open("db_profiles.json", "r") as f:
+        return json.load(f)
+
 @st.cache_data
 def get_plotly_image(df, chart_type, x_axis, y_axes):
     """Generates Plotly PNG bytes with caching to prevent UI lag."""
@@ -24,9 +30,88 @@ def get_plotly_image(df, chart_type, x_axis, y_axes):
         return None
     
     return fig.to_image(format="png")
+from fpdf import FPDF
+import io
+
+def create_pdf_report(df, question, sql, images=None):
+    """Generates a professional PDF report from query results."""
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # Title
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, "MicroQuery Analysis Report", ln=True, align='C')
+    pdf.set_font("Arial", size=10)
+    pdf.cell(0, 10, f"Generated on: {time.ctime()}", ln=True, align='C')
+    pdf.ln(10)
+    
+    # Question & SQL
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Natural Language Question:", ln=True)
+    pdf.set_font("Arial", size=10)
+    pdf.multi_cell(0, 10, question)
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Generated SQL Engine:", ln=True)
+    pdf.set_font("Courier", size=8)
+    pdf.multi_cell(0, 5, sql)
+    pdf.ln(10)
+    
+    # Data Preview
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, f"Data Insights (Showing top {min(len(df), 15)} rows):", ln=True)
+    pdf.set_font("Arial", size=8)
+    
+    # Header
+    col_width = pdf.epw / min(len(df.columns), 6)
+    for col in df.columns[:6]:
+        pdf.cell(col_width, 10, str(col), border=1)
+    pdf.ln()
+    
+    # Rows
+    for i in range(min(len(df), 15)):
+        for col in df.columns[:6]:
+            pdf.cell(col_width, 8, str(df.iloc[i][col])[:20], border=1)
+        pdf.ln()
+    
+    # Images (Charts)
+    if images:
+        for title, img_bytes in images.items():
+            pdf.add_page()
+            pdf.set_font("Arial", 'B', 14)
+            pdf.cell(0, 10, title, ln=True, align='C')
+            img_stream = io.BytesIO(img_bytes)
+            pdf.image(img_stream, x=10, y=30, w=190)
+            
+    return pdf.output()
+
 from dotenv import load_dotenv
 
-# Page configuration
+# --- AUTHENTICATION ---
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+def login_screen():
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.image("https://cdn-icons-png.flaticon.com/512/1053/1053210.png", width=80)
+        st.title("🛡️ Secure Access")
+        user = st.text_input("Username")
+        pw = st.text_input("Password", type="password")
+        if st.button("Log In", use_container_width=True):
+            if user == "admin" and pw == "admin123":
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
+    st.stop()
+
+# Page configuration (MUST be the first Streamlit command if not stopping)
+if not st.session_state.authenticated:
+    st.set_page_config(page_title="MicroQuery Login", page_icon="🛡️")
+    login_screen()
+
 st.set_page_config(
     page_title="MSSQL Micromodel Chat",
     page_icon="🤖",
@@ -56,12 +141,21 @@ def get_engine(model_name):
     return MicromodelEngine(model_name=model_name)
 
 @st.cache_resource
-def get_teacher():
-    return SchemaTeacher()
+def get_teacher(conn_str):
+    return SchemaTeacher(connection_string=conn_str)
 
 # Sidebar controls
 with st.sidebar:
     st.header("⚙️ Settings")
+    
+    # 0. Database Profile Selector
+    profiles = load_db_profiles()
+    profile_names = [p["name"] for p in profiles]
+    selected_p_name = st.selectbox("Database Profile", profile_names)
+    selected_p = next(p for p in profiles if p["name"] == selected_p_name)
+    
+    # Construct Connection String
+    conn_str = f"postgresql+psycopg2://{selected_p['user']}:{selected_p['pass']}@{selected_p['host']}:{selected_p['port']}/{selected_p['database']}"
     
     # 1. Model Selector
     available_models = ["phi3.5:latest", "llama3.1:latest", "mistral", "gemma2"]
@@ -72,8 +166,13 @@ with st.sidebar:
     review_mode = st.toggle("🛡️ Review Mode (Edit SQL)", value=False)
     
     st.divider()
+    if st.sidebar.button("🔓 Logout", use_container_width=True):
+        st.session_state.authenticated = False
+        st.rerun()
+
+    st.sidebar.divider()
     st.header("🔍 Database Insight")
-    teacher = get_teacher()
+    teacher = get_teacher(conn_str)
     engine = get_engine(selected_model)
     
     if st.checkbox("Show Compact Schema"):
@@ -187,13 +286,40 @@ if prompt := st.chat_input("Ask a question about your data..."):
                 st.dataframe(filtered_df, use_container_width=True)
                 
                 # Export Facility (Filtered)
-                csv = filtered_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download Filtered CSV",
-                    data=csv,
-                    file_name=f"filtered_result_{int(time.time())}.csv",
-                    mime='text/csv',
-                )
+                col_csv, col_pdf = st.columns(2)
+                with col_csv:
+                    csv = filtered_df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Download Filtered CSV",
+                        data=csv,
+                        file_name=f"filtered_result_{int(time.time())}.csv",
+                        mime='text/csv',
+                    )
+                
+                with col_pdf:
+                    if st.button("📄 Generate PDF Report", use_container_width=True):
+                        with st.spinner("🖋️ Authoring PDF Report..."):
+                            report_images = {}
+                            num_cols = filtered_df.select_dtypes(include=['number']).columns.tolist()
+                            cat_cols = filtered_df.select_dtypes(exclude=['number', 'datetime']).columns.tolist()
+                            date_cols = filtered_df.select_dtypes(include=['datetime']).columns.tolist()
+                            x_axis = cat_cols[0] if cat_cols else (date_cols[0] if date_cols else None)
+                            y_axes = num_cols[:3]
+                            
+                            if x_axis and y_axes:
+                                report_images["Comparison Analysis (Bar)"] = get_plotly_image(filtered_df, "bar", x_axis, y_axes)
+                                report_images["Composition (Donut)"] = get_plotly_image(filtered_df, "donut", x_axis, y_axes)
+                            
+                            if len(num_cols) >= 2:
+                                report_images["Metric Correlation (Heatmap)"] = get_plotly_image(filtered_df, "heatmap", None, num_cols)
+                            
+                            pdf_bytes = create_pdf_report(filtered_df, prompt, final_sql, report_images)
+                            st.download_button(
+                                label="📥 Save PDF Report",
+                                data=pdf_bytes,
+                                file_name=f"analysis_report_{int(time.time())}.pdf",
+                                mime='application/pdf'
+                            )
 
                 # 4. Proactive Visuals
                 if not filtered_df.empty and len(filtered_df.columns) >= 2:
