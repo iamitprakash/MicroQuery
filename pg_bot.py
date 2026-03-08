@@ -117,6 +117,13 @@ if prompt := st.chat_input("Ask a question about your data..."):
                     status.update(label="Success!", state="complete")
                     df = pd.DataFrame(result["data"])
                     
+                    # 2.1 Sanitize Data Types (Cast Decimals to Floats)
+                    with st.spinner("🔢 Processing database types..."):
+                        import decimal
+                        for col in df.columns:
+                            if df[col].apply(lambda x: isinstance(x, decimal.Decimal)).any():
+                                df[col] = df[col].astype(float)
+                    
                     if df.empty:
                         st.warning("📭 **No results found.** The query executed successfully but returned zero rows. Try adjusting your filters (e.g., check if the city name exists in the database).")
                         # Add a helpful hint to show available cities if it was a city query
@@ -146,61 +153,67 @@ if prompt := st.chat_input("Ask a question about your data..."):
                             
                             if num_cols:
                                 with st.expander("📊 Proactive Data Insights", expanded=True):
-                                    suggested_chart = "Bar"
-                                    reason = "Data visualization prepared for trend/distribution analysis."
-                                    
-                                    if "-- CHART:" in final_sql:
-                                        parts = final_sql.split("-- CHART:")[1].split("|")
-                                        suggested_chart = parts[0].strip()
-                                        if len(parts) > 1 and "REASON:" in parts[1]:
-                                            reason = parts[1].replace("REASON:", "").strip()
-                                    
-                                    tabs = st.tabs(["📊 Bar/Line", "🍩 Composition", "🔥 Correlation"])
-                                    
-                                    # Determine X-axis: Categorical -> Date -> Index
-                                    x_axis = None
-                                    if cat_cols: x_axis = cat_cols[0]
-                                    elif date_cols: x_axis = date_cols[0]
-                                    
-                                    # Metrics
-                                    y_axes = num_cols[:3]
-                                    chart_data = df.set_index(x_axis)[y_axes] if x_axis else df[y_axes]
-                                    
-                                    with tabs[0]:
-                                        st.subheader("Comparison Analysis")
-                                        fig_bar = px.bar(df, x=x_axis, y=y_axes, barmode="group", title="Metric Comparison (Bar)")
-                                        st.plotly_chart(fig_bar, use_container_width=True)
-                                        img_bar = fig_bar.to_image(format="png")
-                                        st.download_button(label="📥 Save Bar Chart as PNG", data=img_bar, file_name="bar_chart.png", mime="image/png")
+                                    with st.spinner("📈 Generating interactive visuals..."):
+                                        suggested_chart = "Bar"
+                                        reason = "Data visualization prepared for trend/distribution analysis."
                                         
-                                        fig_line = px.line(df, x=x_axis, y=y_axes, title="Trend Analysis (Line)")
-                                        st.plotly_chart(fig_line, use_container_width=True)
-                                        img_line = fig_line.to_image(format="png")
-                                        st.download_button(label="📥 Save Line Chart as PNG", data=img_line, file_name="line_chart.png", mime="image/png")
-                                    
-                                    with tabs[1]:
-                                        if x_axis and len(num_cols) > 0:
-                                            fig_pie = px.pie(df, names=x_axis, values=num_cols[0], title="Market Share (Pie)")
-                                            st.plotly_chart(fig_pie, use_container_width=True)
-                                            img_pie = fig_pie.to_image(format="png")
-                                            st.download_button(label="📥 Save Pie Chart as PNG", data=img_pie, file_name="pie_chart.png", mime="image/png")
+                                        if "-- CHART:" in final_sql:
+                                            parts = final_sql.split("-- CHART:")[1].split("|")
+                                            suggested_chart = parts[0].strip()
+                                            if len(parts) > 1 and "REASON:" in parts[1]:
+                                                reason = parts[1].replace("REASON:", "").strip()
+                                        
+                                        tabs = st.tabs(["📊 Bar/Line", "🍩 Composition", "🔥 Correlation"])
+                                        
+                                        # Determine X-axis: Categorical -> Date -> Index
+                                        x_axis = None
+                                        if cat_cols: x_axis = cat_cols[0]
+                                        elif date_cols: x_axis = date_cols[0]
+                                        
+                                        # Metrics
+                                        y_axes = num_cols[:3]
+                                        chart_data = df.set_index(x_axis)[y_axes] if x_axis else df[y_axes]
+                                        
+                                        with tabs[0]:
+                                            st.subheader("Comparison Analysis")
+                                            fig_bar = px.bar(df, x=x_axis, y=y_axes, barmode="group", title="Metric Comparison (Bar)")
+                                            st.plotly_chart(fig_bar, use_container_width=True)
+                                            with st.spinner("💾 Preparing PNG export..."):
+                                                img_bar = fig_bar.to_image(format="png")
+                                                st.download_button(label="📥 Save Bar Chart as PNG", data=img_bar, file_name="bar_chart.png", mime="image/png")
                                             
-                                            fig_donut = px.pie(df, names=x_axis, values=num_cols[0], hole=0.5, title="Composition (Donut)")
-                                            st.plotly_chart(fig_donut, use_container_width=True)
-                                            img_donut = fig_donut.to_image(format="png")
-                                            st.download_button(label="📥 Save Donut Chart as PNG", data=img_donut, file_name="donut_chart.png", mime="image/png")
-                                        else:
-                                            st.warning("Pie/Donut requires a categorical column and a numeric value.")
-                                    
-                                    with tabs[2]:
-                                        if len(num_cols) >= 2:
-                                            corr_df = df[num_cols].corr()
-                                            fig_heat = px.imshow(corr_df, text_auto=True, title="Metric Correlation Heatmap", aspect="auto")
-                                            st.plotly_chart(fig_heat, use_container_width=True)
-                                            img_heat = fig_heat.to_image(format="png")
-                                            st.download_button(label="📥 Save Heatmap as PNG", data=img_heat, file_name="heatmap.png", mime="image/png")
-                                        else:
-                                            st.warning("Heatmap requires multiple numeric metrics to analyze correlation.")
+                                            fig_line = px.line(df, x=x_axis, y=y_axes, title="Trend Analysis (Line)")
+                                            st.plotly_chart(fig_line, use_container_width=True)
+                                            with st.spinner("💾 Preparing PNG export..."):
+                                                img_line = fig_line.to_image(format="png")
+                                                st.download_button(label="📥 Save Line Chart as PNG", data=img_line, file_name="line_chart.png", mime="image/png")
+                                        
+                                        with tabs[1]:
+                                            if x_axis and len(num_cols) > 0:
+                                                fig_pie = px.pie(df, names=x_axis, values=num_cols[0], title="Market Share (Pie)")
+                                                st.plotly_chart(fig_pie, use_container_width=True)
+                                                with st.spinner("💾 Preparing PNG export..."):
+                                                    img_pie = fig_pie.to_image(format="png")
+                                                    st.download_button(label="📥 Save Pie Chart as PNG", data=img_pie, file_name="pie_chart.png", mime="image/png")
+                                                
+                                                fig_donut = px.pie(df, names=x_axis, values=num_cols[0], hole=0.5, title="Composition (Donut)")
+                                                st.plotly_chart(fig_donut, use_container_width=True)
+                                                with st.spinner("💾 Preparing PNG export..."):
+                                                    img_donut = fig_donut.to_image(format="png")
+                                                    st.download_button(label="📥 Save Donut Chart as PNG", data=img_donut, file_name="donut_chart.png", mime="image/png")
+                                            else:
+                                                st.warning("Pie/Donut requires a categorical column and a numeric value.")
+                                        
+                                        with tabs[2]:
+                                            if len(num_cols) >= 2:
+                                                corr_df = df[num_cols].corr()
+                                                fig_heat = px.imshow(corr_df, text_auto=True, title="Metric Correlation Heatmap", aspect="auto")
+                                                st.plotly_chart(fig_heat, use_container_width=True)
+                                                with st.spinner("💾 Preparing PNG export..."):
+                                                    img_heat = fig_heat.to_image(format="png")
+                                                    st.download_button(label="📥 Save Heatmap as PNG", data=img_heat, file_name="heatmap.png", mime="image/png")
+                                            else:
+                                                st.warning("Heatmap requires multiple numeric metrics to analyze correlation.")
 
                     # History
                     st.session_state.messages.append({
