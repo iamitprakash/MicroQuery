@@ -4,3 +4,7 @@ ollama
 streamlit
 python-dotenv
 sqlalchemy
+pandas
+plotly
+kaleido
+faker

@@ -46,9 +46,17 @@ python3 -m pip install -r requirements.txt --break-system-packages
 python3 setup_real_db.py
 ```
 
-### 3. Run the App
-
+### 3. Deployment via Docker (Recommended)
 ```bash
+# Start the entire stack (App + PostgreSQL)
+docker-compose up --build -d
+```
+The app will be available at `http://localhost:8501`.
+
+### 4. Manual Local Run
+```bash
+# 1. Start your local Ollama if not running
+# 2. Run the dashboard
 streamlit run pg_bot.py
 ```
 

@@ -1,5 +1,6 @@
 import ollama
 import sys
+from cache_manager import CacheManager
 
 class MicromodelEngine:
     """
@@ -8,7 +9,7 @@ class MicromodelEngine:
     """
     def __init__(self, model_name="phi3.5:latest"):
         self.model_name = model_name
-        self.sql_cache = {} # Natural Language -> SQL
+        self.cache = CacheManager()
 
     def _ensure_model(self):
         """Verify the model exists in Ollama."""
@@ -49,8 +50,9 @@ Output ONLY a comma-separated list of table names. No explanation."""
             return f"-- ERROR: Model '{self.model_name}' not found in Ollama. Run 'ollama pull {self.model_name}'."
 
         # 2. Check Cache
-        if question in self.sql_cache:
-            return self.sql_cache[question]
+        cached = self.cache.get_cached_sql(question, self.model_name)
+        if cached:
+            return cached
 
         # 2. Schema Pruning
         from sqlalchemy import inspect
@@ -98,7 +100,7 @@ Generate valid PostgreSQL query based on the schema.
                 sql = sql.split(";")[0] + ";"
             
             final_sql = sql.strip()
-            self.sql_cache[question] = final_sql # Cache it
+            self.cache.store_sql(question, self.model_name, final_sql) # Persist it
             return final_sql
         except Exception as e:
             return f"-- ERROR: Model failure: {str(e)}"
