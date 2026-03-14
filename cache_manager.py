@@ -18,6 +18,7 @@ class CacheManager:
                     PRIMARY KEY (nl_query, model_name)
                 )
             """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_query_model ON sql_cache (nl_query, model_name)")
 
     def get_cached_sql(self, nl_query, model_name):
         try:
@@ -51,6 +52,7 @@ class CacheManager:
                 )
         except Exception as e:
             print(f"Feedback update error: {e}")
+
     def get_all_cache(self):
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -60,3 +62,10 @@ class CacheManager:
         except Exception as e:
             print(f"Cache list error: {e}")
             return []
+
+    def clear_cache(self):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("DELETE FROM sql_cache")
+        except Exception as e:
+            print(f"Cache clear error: {e}")

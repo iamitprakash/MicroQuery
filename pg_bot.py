@@ -216,6 +216,11 @@ if prompt := st.chat_input("Ask a question about your data..."):
             # 1. Generate SQL
             status.write(f"Generating SQL using {selected_model}...")
             generated_sql = engine.generate_sql(prompt, teacher)
+            metrics = engine.last_metrics
+            if metrics["cache_hit"]:
+                st.success(f"⚡ Cache Hit! (Retrieval time: {metrics['time']:.4f}s)")
+            else:
+                st.info(f"🧠 AI Generation Complete (Time: {metrics['time']:.2f}s)")
             
             # Handle Review Mode
             if review_mode:
@@ -266,22 +271,19 @@ if prompt := st.chat_input("Ask a question about your data..."):
                             st.write("Top cities in your database:")
                             st.table(pd.DataFrame(city_check["data"]))
             else:
-                # 3. Interactive Drill-Downs
+                # 3. Interactive Drill-Downs (Multi-Column)
                 cat_cols = df.select_dtypes(exclude=['number', 'datetime']).columns.tolist()
                 filtered_df = df.copy()
                 
                 if cat_cols:
-                    primary_dim = cat_cols[0]
                     with st.sidebar.expander("🔍 Interactive Drill-Down", expanded=True):
-                        st.write(f"Filter by **{primary_dim}**:")
-                        unique_vals = sorted(df[primary_dim].unique().tolist())
-                        selected_vals = st.multiselect("Select values to focus on:", unique_vals, default=unique_vals)
+                        for col in cat_cols:
+                            unique_vals = sorted(df[col].unique().tolist())
+                            selected_vals = st.multiselect(f"Filter by {col}:", unique_vals, default=unique_vals, key=f"filter_{col}")
+                            filtered_df = filtered_df[filtered_df[col].isin(selected_vals)]
                         
-                        if selected_vals:
-                            filtered_df = df[df[primary_dim].isin(selected_vals)]
-                        else:
-                            st.warning("Please select at least one value.")
-                            filtered_df = df.iloc[0:0] # Empty but keeps schema
+                        if filtered_df.empty:
+                            st.warning("Filters returned no data.")
 
                 st.dataframe(filtered_df, use_container_width=True)
                 
@@ -405,6 +407,12 @@ if prompt := st.chat_input("Ask a question about your data..."):
 st.divider()
 with st.expander("🛡️ System Activity & Cache Explorer"):
     st.info("The AI caches generated SQL in a local **SQLite** database for privacy and speed. This is separate from your main **PostgreSQL** data.")
+    
+    if st.button("🗑️ Clear Persistent Cache", use_container_width=True):
+        engine.cache.clear_cache()
+        st.success("Cache cleared successfully!")
+        st.rerun()
+
     all_cache = engine.cache.get_all_cache()
     if all_cache:
         cache_df = pd.DataFrame(all_cache)

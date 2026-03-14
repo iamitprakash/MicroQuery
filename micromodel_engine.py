@@ -1,5 +1,6 @@
 import ollama
 import sys
+import time
 from cache_manager import CacheManager
 
 class MicromodelEngine:
@@ -10,6 +11,7 @@ class MicromodelEngine:
     def __init__(self, model_name="phi3.5:latest"):
         self.model_name = model_name
         self.cache = CacheManager()
+        self.last_metrics = {"cache_hit": False, "time": 0.0}
 
     def _ensure_model(self):
         """Verify the model exists in Ollama."""
@@ -45,6 +47,9 @@ Output ONLY a comma-separated list of table names. No explanation."""
         """
         Translates natural language to SQL using Pruning and Caching.
         """
+        start_time = time.time()
+        self.last_metrics = {"cache_hit": False, "time": 0.0}
+
         # 1. Runtime model check
         if not self._ensure_model():
             return f"-- ERROR: Model '{self.model_name}' not found in Ollama. Run 'ollama pull {self.model_name}'."
@@ -52,6 +57,8 @@ Output ONLY a comma-separated list of table names. No explanation."""
         # 2. Check Cache
         cached = self.cache.get_cached_sql(question, self.model_name)
         if cached:
+            self.last_metrics["cache_hit"] = True
+            self.last_metrics["time"] = time.time() - start_time
             return cached
 
         # 2. Schema Pruning
@@ -101,8 +108,10 @@ Generate valid PostgreSQL query based on the schema.
             
             final_sql = sql.strip()
             self.cache.store_sql(question, self.model_name, final_sql) # Persist it
+            self.last_metrics["time"] = time.time() - start_time
             return final_sql
         except Exception as e:
+            self.last_metrics["time"] = time.time() - start_time
             return f"-- ERROR: Model failure: {str(e)}"
 
 if __name__ == "__main__":

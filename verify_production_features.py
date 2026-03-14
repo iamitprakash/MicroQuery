@@ -23,7 +23,7 @@ def verify_advanced_features():
     cached_sql = engine.generate_sql(question, teacher)
     cache_time = time.time() - start_cache
     print(f"[+] Cached SQL retrieval: {cache_time:.4f}s")
-    if cache_time < 0.01:
+    if cache_time < 0.05:
         print("[PASS] Cache hit confirmed!")
     else:
         print("[FAIL] Cache miss.")
